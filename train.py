@@ -11,13 +11,6 @@
 import datetime
 import pandas as pd
 import numpy as np
-from scipy import rand
-from sklearn.model_selection import train_test_split
-from sklearn.svm import LinearSVC
-import pickle
-from sklearn.model_selection import KFold
-from sklearn.model_selection import cross_val_score
-
 
 _meal_features = pd.DataFrame()
 _no_meal_features = pd.DataFrame()
@@ -143,54 +136,25 @@ def main():
     global _meal_features
     cgm_data_file = 'CGMData.csv'
     insulin_data_file = 'InsulinData.csv'
-    p2cgm_data_file = 'CGM_patient2.csv'
-    p2insulin_data_file = 'Insulin_patient2.csv'
 
     # Read CSV Files
     cgmFrame = pd.read_csv(cgm_data_file, low_memory=False)
-    p2cgmFrame = pd.read_csv(p2cgm_data_file, low_memory=False)
     insulinFrame = pd.read_csv(insulin_data_file, low_memory=False)
-    p2insulinFrame = pd.read_csv(p2insulin_data_file, low_memory=False)
 
     # Remove unwanted columns
     cgmData = cgmFrame[['Index','Date', 'Time', 'Sensor Glucose (mg/dL)', 'ISIG Value']]
-    p2cgmData = p2cgmFrame[['Index','Date', 'Time', 'Sensor Glucose (mg/dL)', 'ISIG Value']]
     insulinData = insulinFrame[['Index','Date', 'Time', 'BWZ Carb Input (grams)']]
-    p2insulinData = p2insulinFrame[['Index','Date', 'Time', 'BWZ Carb Input (grams)']]
 
     # extract meal data, interpolate missing values
     mealRows = extractMealData(insulinData)
-    mealRows2 = extractMealData(p2insulinData)
     cgmData.interpolate(inplace=True)
-    p2cgmData.interpolate(inplace=True)
 
     # extract glucose data and the features for each matrix
     extractGlucoseData(cgmData, mealRows)
-    extractGlucoseData(p2cgmData, mealRows2)
     meal_features = pd.concat([_meal_features, _no_meal_features])
     meal_features.reset_index(drop=True, inplace=True)
     meal_features.fillna(0, inplace=True)
 
-    # create label vector
-    ones = np.ones(len(_meal_features))
-    zeroes = np.zeros(len(_no_meal_features))
-    labelVector = np.concatenate((ones, zeroes), axis=None)
-    x_train, x_test, y_train, y_test = train_test_split(meal_features, labelVector, test_size=0.2, random_state=42)
-
-    # run data through model
-    model = LinearSVC(random_state=0, tol=1e-5)
-    model.fit(x_train, y_train.ravel())
-    pred = model.predict(x_test)
-
-    # k fold cross validation with 10 splits
-    kVal = KFold(n_splits=10, random_state=None)
-    scores = cross_val_score(model, meal_features, labelVector, scoring='accuracy', cv=kVal, n_jobs=-1)
-    print('Accuracy: %.3f (%.3f)' % (np.mean(scores), np.std(scores)))
-    # print("Accuracy:",metrics.accuracy_score(y_test, pred))
-    modelFile = 'model.sav'
-
-    # save to pickle file
-    pickle.dump(model, open(modelFile,'wb'))
 
 if __name__ == "__main__":
     main()
