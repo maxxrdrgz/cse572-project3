@@ -16,7 +16,9 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
+from sklearn.neighbors import NearestNeighbors
 import math
+import sys
 
 _meal_features = pd.DataFrame()
 _no_meal_features = pd.DataFrame()
@@ -163,14 +165,24 @@ def main():
     print(maxCarb)
     print(minCarb)
     print(nBins)
-    groundTruthDf = pd.qcut(mealRows['BWZ Carb Input (grams)'], q=nBins, )
+    cats = range(nBins)
+    gtAggregateDf = mealRows.groupby(pd.qcut(mealRows['BWZ Carb Input (grams)'], q=nBins, labels=cats)).count()
+    groundTruthDf = pd.DataFrame({'points': gtAggregateDf['Index']})
     kmeans = KMeans(n_clusters=nBins)
     _meal_features = _meal_features.fillna(0)
-    tempkmeans = kmeans.fit(_meal_features)
-    tempfit = kmeans.fit_predict(_meal_features)
-    _meal_features['Cluster'] = tempfit
+    kmeansFit = kmeans.fit(_meal_features)
+    kmeansPred = kmeansFit.predict(_meal_features)
+    _meal_features['Cluster'] = kmeansPred
     kmeansGrouped = _meal_features.groupby('Cluster').apply(list)
-    print(tempkmeans.inertia_)
+
+
+    print(kmeansFit.inertia_)
+    print(groundTruthDf)
+    print(groundTruthDf.iloc[0]['points'])
+
+    sys.exit()
+
+
 
     _meal_features_scaled = StandardScaler().fit_transform(_meal_features)
     _meal_features_normalized = normalize(_meal_features_scaled)
@@ -186,16 +198,12 @@ def main():
     # nbrs = neigh.fit(_meal_features_principal)
     # distances, indices = nbrs.kneighbors(_meal_features_principal)
     # distances = np.sort(distances, axis=0)
-    # np.set_printoptions(threshold=np.inf)
+    # # np.set_printoptions(threshold=np.inf)
     # distances = distances[:,1]
-    # tempDist = str(distances)
-    # with open('temp.txt', 'w') as f:
-    #     f.write(tempDist)
+    # # tempDist = str(distances)
+
     # print(distances)
     defaultEps = 0.1
-    # db = DBSCAN(eps=0.075, min_samples=5).fit(_meal_features_principal)
-    # labels = db.labels_
-    # numberOfDbClusters = len(set(labels)) - (1 if -1 in labels else 0)
     n_clusters_ = 0
     while(n_clusters_ != nBins):
         db = DBSCAN(eps=defaultEps, min_samples=5).fit(_meal_features_principal)
@@ -203,14 +211,37 @@ def main():
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
         n_noise_ = list(labels).count(-1)
         if(n_clusters_ > nBins):
-            defaultEps = defaultEps + 0.001
+            defaultEps = defaultEps + 0.0001
         elif(n_clusters_ < nBins):
-            defaultEps = defaultEps - 0.001
+            defaultEps = defaultEps - 0.0001
         print(defaultEps)
         print("Estimated number of clusters: %d" % n_clusters_)
         print("Estimated number of noise points: %d" % n_noise_)
 
+    dbscanSSE = 0
+    cluster_centers = {}
 
+
+    for i in range(nBins):
+        points_of_cluster = _meal_features_principal.to_numpy()[labels==i,:]
+        centroid_of_cluster= np.mean(points_of_cluster, axis=0)
+        cluster_centers[i] = centroid_of_cluster
+
+        
+        
+    # cluster_centers = db.cluster_centers_
+    for point, label in zip(_meal_features_principal.to_numpy(), labels):
+        if(label != -1):
+            dbscanSSE += np.square(point - cluster_centers[label]).sum()
+
+
+    print(pd.Series(labels).value_counts())
+
+
+    # resultsList = [kmeansFit.inertia_, dbscanSSE, 0, 0, 0, 0]
+    
+    # resultsDf = pd.DataFrame(resultsList).T
+    # resultsDf.to_csv('./Result.csv', index=False, header=False)
 
 
     # Number of clusters in labels, ignoring noise if present.
