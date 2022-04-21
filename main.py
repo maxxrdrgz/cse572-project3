@@ -166,6 +166,7 @@ def main():
     print(minCarb)
     print(nBins)
     cats = range(nBins)
+    mealRows['bin'] = pd.qcut(mealRows['BWZ Carb Input (grams)'], q=nBins, labels=cats)
     gtAggregateDf = mealRows.groupby(pd.qcut(mealRows['BWZ Carb Input (grams)'], q=nBins, labels=cats)).count()
     groundTruthDf = pd.DataFrame({'points': gtAggregateDf['Index']})
     kmeans = KMeans(n_clusters=nBins)
@@ -174,14 +175,8 @@ def main():
     kmeansPred = kmeansFit.predict(_meal_features)
     _meal_features['Cluster'] = kmeansPred
     kmeansGrouped = _meal_features.groupby('Cluster').apply(list)
-
-
-    print(kmeansFit.inertia_)
-    print(groundTruthDf)
-    print(groundTruthDf.iloc[0]['points'])
-
+    print(mealRows)
     sys.exit()
-
 
 
     _meal_features_scaled = StandardScaler().fit_transform(_meal_features)
@@ -192,7 +187,7 @@ def main():
     _meal_features_principal = pca.fit_transform(_meal_features_normalized)
     _meal_features_principal = pd.DataFrame(_meal_features_principal)
     _meal_features_principal.columns = ['P1', 'P2']
-    # print(_meal_features_principal)
+    print(_meal_features_principal)
 
     # neigh = NearestNeighbors(n_neighbors=2)
     # nbrs = neigh.fit(_meal_features_principal)
@@ -224,6 +219,8 @@ def main():
 
     for i in range(nBins):
         points_of_cluster = _meal_features_principal.to_numpy()[labels==i,:]
+        print(points_of_cluster)
+        sys.exit()
         centroid_of_cluster= np.mean(points_of_cluster, axis=0)
         cluster_centers[i] = centroid_of_cluster
 
