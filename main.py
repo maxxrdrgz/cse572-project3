@@ -11,6 +11,12 @@
 import datetime
 import pandas as pd
 import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
+import math
 
 _meal_features = pd.DataFrame()
 _no_meal_features = pd.DataFrame()
@@ -62,6 +68,7 @@ def extractGlucoseData(cgmData, insulinDf):
             (cgmData['DateTime'] < noMealTime)
         ]
         glucoseSlice['meal_time'] = glucoseTime
+        glucoseSlice['carb_intake'] = insulinDf.iloc[i]['BWZ Carb Input (grams)']
         if(len(glucoseSlice) >= 24): 
             arrOfGlucoseFrames.append(glucoseSlice)
             _meal_features = _meal_features.append(feature_extractor(glucoseSlice),  ignore_index=True)
@@ -148,12 +155,74 @@ def main():
     # extract meal data, interpolate missing values
     mealRows = extractMealData(insulinData)
     cgmData.interpolate(inplace=True)
-
-    # extract glucose data and the features for each matrix
     extractGlucoseData(cgmData, mealRows)
-    meal_features = pd.concat([_meal_features, _no_meal_features])
-    meal_features.reset_index(drop=True, inplace=True)
-    meal_features.fillna(0, inplace=True)
+    
+    minCarb = mealRows['BWZ Carb Input (grams)'].min()
+    maxCarb = mealRows['BWZ Carb Input (grams)'].max()
+    nBins = math.ceil((maxCarb-minCarb)/20)
+    print(maxCarb)
+    print(minCarb)
+    print(nBins)
+    groundTruthDf = pd.qcut(mealRows['BWZ Carb Input (grams)'], q=nBins, )
+    kmeans = KMeans(n_clusters=nBins)
+    _meal_features = _meal_features.fillna(0)
+    tempkmeans = kmeans.fit(_meal_features)
+    tempfit = kmeans.fit_predict(_meal_features)
+    _meal_features['Cluster'] = tempfit
+    kmeansGrouped = _meal_features.groupby('Cluster').apply(list)
+    print(tempkmeans.inertia_)
+
+    _meal_features_scaled = StandardScaler().fit_transform(_meal_features)
+    _meal_features_normalized = normalize(_meal_features_scaled)
+    _meal_features_normalized = pd.DataFrame(_meal_features_normalized)
+
+    pca = PCA(n_components = 2)
+    _meal_features_principal = pca.fit_transform(_meal_features_normalized)
+    _meal_features_principal = pd.DataFrame(_meal_features_principal)
+    _meal_features_principal.columns = ['P1', 'P2']
+    # print(_meal_features_principal)
+
+    # neigh = NearestNeighbors(n_neighbors=2)
+    # nbrs = neigh.fit(_meal_features_principal)
+    # distances, indices = nbrs.kneighbors(_meal_features_principal)
+    # distances = np.sort(distances, axis=0)
+    # np.set_printoptions(threshold=np.inf)
+    # distances = distances[:,1]
+    # tempDist = str(distances)
+    # with open('temp.txt', 'w') as f:
+    #     f.write(tempDist)
+    # print(distances)
+    defaultEps = 0.1
+    # db = DBSCAN(eps=0.075, min_samples=5).fit(_meal_features_principal)
+    # labels = db.labels_
+    # numberOfDbClusters = len(set(labels)) - (1 if -1 in labels else 0)
+    n_clusters_ = 0
+    while(n_clusters_ != nBins):
+        db = DBSCAN(eps=defaultEps, min_samples=5).fit(_meal_features_principal)
+        labels = db.labels_
+        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+        n_noise_ = list(labels).count(-1)
+        if(n_clusters_ > nBins):
+            defaultEps = defaultEps + 0.001
+        elif(n_clusters_ < nBins):
+            defaultEps = defaultEps - 0.001
+        print(defaultEps)
+        print("Estimated number of clusters: %d" % n_clusters_)
+        print("Estimated number of noise points: %d" % n_noise_)
+
+
+
+
+    # Number of clusters in labels, ignoring noise if present.
+    # n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+    # n_noise_ = list(labels).count(-1)
+    # # print(kmeansGrouped)
+    # print("Estimated number of clusters: %d" % n_clusters_)
+    # print("Estimated number of noise points: %d" % n_noise_)
+
+    # meal_features = pd.concat([_meal_features, _no_meal_features])
+    # meal_features.reset_index(drop=True, inplace=True)
+    # meal_features.fillna(0, inplace=True)
 
 
 if __name__ == "__main__":
