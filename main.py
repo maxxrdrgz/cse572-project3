@@ -17,6 +17,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import confusion_matrix
 import math
 import sys
 
@@ -71,9 +72,8 @@ def extractGlucoseData(cgmData, insulinDf):
         ]
         glucoseSlice['meal_time'] = glucoseTime
         glucoseSlice['carb_intake'] = insulinDf.iloc[i]['BWZ Carb Input (grams)']
-        if(len(glucoseSlice) >= 24): 
-            arrOfGlucoseFrames.append(glucoseSlice)
-            _meal_features = _meal_features.append(feature_extractor(glucoseSlice),  ignore_index=True)
+        arrOfGlucoseFrames.append(glucoseSlice)
+        _meal_features = _meal_features.append(feature_extractor(glucoseSlice),  ignore_index=True)
         if(len(glucoseSlice2) >= 18):
             _no_meal_features = _no_meal_features.append(feature_extractor(glucoseSlice2), ignore_index=True)
             arrOfNoMealFrames.append(glucoseSlice2)
@@ -140,6 +140,15 @@ def feature_extractor(data):
 
     return featureDict
 
+def purity(matrix, total):
+    maxes = np.amax(matrix, axis=1)
+    purityCalc = 0
+    for i in range(len(maxes)):
+        purityCalc += maxes[i]
+
+    purityCalc = purityCalc/total
+    return purityCalc
+
 def main():
     global _no_meal_features
     global _meal_features
@@ -175,10 +184,11 @@ def main():
     kmeansPred = kmeansFit.predict(_meal_features)
     _meal_features['Cluster'] = kmeansPred
     kmeansGrouped = _meal_features.groupby('Cluster').apply(list)
-    print(mealRows)
+    print(kmeansPred)
+    matrix = confusion_matrix(mealRows['bin'], kmeansPred).T
+    print(matrix)
+    print(purity(matrix, mealRows.shape[0]))
     sys.exit()
-
-
     _meal_features_scaled = StandardScaler().fit_transform(_meal_features)
     _meal_features_normalized = normalize(_meal_features_scaled)
     _meal_features_normalized = pd.DataFrame(_meal_features_normalized)
@@ -206,12 +216,27 @@ def main():
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
         n_noise_ = list(labels).count(-1)
         if(n_clusters_ > nBins):
-            defaultEps = defaultEps + 0.0001
+            defaultEps = defaultEps + 0.000025
         elif(n_clusters_ < nBins):
-            defaultEps = defaultEps - 0.0001
-        print(defaultEps)
+            defaultEps = defaultEps - 0.000025
+        # print(defaultEps)
         print("Estimated number of clusters: %d" % n_clusters_)
         print("Estimated number of noise points: %d" % n_noise_)
+
+    
+    matrix = confusion_matrix(mealRows['bin'], labels).T
+
+    if(n_noise_ > 0):
+        matrix = np.delete(matrix, 0, 0)
+    maxes = np.amax(matrix, axis=1)
+
+    
+
+    print(matrix)
+    print(maxes)
+    print(purity(matrix, mealRows.shape[0]))
+    # print(len(labels))
+    sys.exit()
 
     dbscanSSE = 0
     cluster_centers = {}
@@ -219,8 +244,7 @@ def main():
 
     for i in range(nBins):
         points_of_cluster = _meal_features_principal.to_numpy()[labels==i,:]
-        print(points_of_cluster)
-        sys.exit()
+        # print(points_of_cluster)
         centroid_of_cluster= np.mean(points_of_cluster, axis=0)
         cluster_centers[i] = centroid_of_cluster
 
